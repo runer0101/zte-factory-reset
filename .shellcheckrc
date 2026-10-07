@@ -1,0 +1,18 @@
+# ShellCheck configuration
+# https://github.com/koalaman/shellcheck/blob/master/shellcheck.1.md
+
+# Source path for shellcheck (helps resolve sourced files)
+# source-path=SCRIPTDIR
+
+# Default shell dialect
+shell=bash
+
+# Enable additional opt-in checks
+enable=quote-safe-variables
+
+# Severity: only fail on errors and warnings, not info
+severity=warning
+
+# Exclude specific checks (use sparingly)
+# SC1091 - Not following sourced files (we use . /etc/os-release)
+disable=SC1091

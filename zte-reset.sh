@@ -23,7 +23,7 @@
 #
 #  ----------------------------------------------------------------------------
 #  Licencia: MIT
-#  Repo:     https://github.com/<tu-usuario>/zte-factory-reset
+#  Repo:     https://github.com/runer0101/zte-factory-reset
 #===============================================================================
 
 set -euo pipefail
@@ -32,13 +32,14 @@ IFS=$'\n\t'
 #===============================================================================
 # CONSTANTES
 #===============================================================================
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+readonly SCRIPT_NAME
 readonly VERSION="1.0.0"
-readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly ZTE_VENDOR_ID="19d2"
 readonly UDEV_RULE_FILE="/etc/udev/rules.d/51-android-zte.rules"
-readonly LOG_FILE="/tmp/zte-reset-$(date +%Y%m%d-%H%M%S).log"
-readonly REPO_URL="https://github.com/<tu-usuario>/zte-factory-reset"
+LOG_FILE="/tmp/zte-reset-$(date +%Y%m%d-%H%M%S).log"
+readonly LOG_FILE
+readonly REPO_URL="https://github.com/runer0101/zte-factory-reset"
 
 #===============================================================================
 # COLORES (solo si la salida es una terminal interactiva)
@@ -53,7 +54,14 @@ if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/nul
     readonly DIM='\033[2m'
     readonly NC='\033[0m'
 else
-    readonly RED='' GREEN='' YELLOW='' BLUE='' CYAN='' BOLD='' DIM='' NC=''
+    readonly RED=''
+    readonly GREEN=''
+    readonly YELLOW=''
+    readonly BLUE=''
+    readonly CYAN=''
+    readonly BOLD=''
+    readonly DIM=''
+    readonly NC=''
 fi
 
 #===============================================================================
@@ -75,7 +83,6 @@ _log() {
     shift
     local timestamp
     timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-    # Solo escribir a log file los mensajes sin códigos ANSI
     local clean_msg="$*"
     clean_msg="${clean_msg//$'\033'/<ESC>}"
     echo "${timestamp} [${level}] ${clean_msg}" >> "$LOG_FILE"
@@ -86,7 +93,13 @@ info()    { _log "INFO"  "${BLUE}${BOLD}ℹ${NC}  ${*}"; }
 success() { _log "OK"    "${GREEN}${BOLD}✓${NC}  ${*}"; }
 warn()    { _log "WARN"  "${YELLOW}${BOLD}⚠${NC}  ${*}"; }
 error()   { _log "ERROR" "${RED}${BOLD}✗${NC}  ${*}"; }
-debug()   { [[ "$VERBOSE" == true ]] && _log "DEBUG" "${CYAN}${BOLD}→${NC}  ${*}" || true; }
+
+debug() {
+    if [[ "$VERBOSE" == true ]]; then
+        _log "DEBUG" "${CYAN}${BOLD}→${NC}  ${*}"
+    fi
+}
+
 section() {
     echo
     _log "SECTION" "${BOLD}${CYAN}── ${*} ──${NC}"
@@ -106,8 +119,9 @@ command_exists() { command -v "$1" >/dev/null 2>&1; }
 # Trap para limpieza en señales
 cleanup() {
     local exit_code=$?
-    # Restaurar cursor si quedó oculto
-    [[ -t 1 ]] && printf '\033[?25h' 2>/dev/null || true
+    if [[ -t 1 ]]; then
+        printf '\033[?25h' 2>/dev/null
+    fi
     if [[ $exit_code -ne 0 ]] && [[ $exit_code -ne 130 ]]; then
         error "Script terminado con error (código: $exit_code)"
         info "Log completo en: $LOG_FILE"
@@ -119,11 +133,11 @@ trap 'exit 130' INT TERM
 
 detect_distro() {
     if [[ -f /etc/os-release ]]; then
-        # shellcheck disable=SC1091
+        # shellcheck source=/dev/null
         . /etc/os-release
-        echo "${ID:-unknown}"
+        printf '%s' "${ID:-unknown}"
     else
-        echo "unknown"
+        printf '%s' "unknown"
     fi
 }
 
@@ -148,7 +162,6 @@ check_environment() {
 
     local has_errors=false
 
-    # 1. Sistema operativo
     if is_wsl; then
         info "Entorno: WSL (Windows Subsystem for Linux) ✓"
     elif [[ "$(uname -s)" == "Linux" ]]; then
@@ -161,7 +174,6 @@ check_environment() {
         has_errors=true
     fi
 
-    # 2. adb / fastboot
     if command_exists fastboot && command_exists adb; then
         local fastboot_ver
         fastboot_ver="$(fastboot --version 2>&1 | head -1 || echo 'desconocida')"
@@ -172,7 +184,6 @@ check_environment() {
         has_errors=true
     fi
 
-    # 3. Reglas udev
     if [[ -f "$UDEV_RULE_FILE" ]] && grep -q "$ZTE_VENDOR_ID" "$UDEV_RULE_FILE" 2>/dev/null; then
         success "Reglas udev para ZTE configuradas ✓"
     else
@@ -180,7 +191,6 @@ check_environment() {
         info "Se configurarán automáticamente al ejecutar el script."
     fi
 
-    # 4. Grupo plugdev
     if groups "${USER:-root}" 2>/dev/null | grep -qw plugdev; then
         success "Usuario en grupo plugdev ✓"
     else
@@ -188,7 +198,6 @@ check_environment() {
         info "Se agregará automáticamente (requiere logout tras la primera ejecución)."
     fi
 
-    # 5. sudo
     if command_exists sudo; then
         success "sudo disponible ✓"
     else
@@ -226,8 +235,11 @@ install_dependencies() {
     case "$distro" in
         arch|manjaro|endeavouros|arcolinux|garuda)
             info "Distro: Arch Linux (o derivado) → pacman"
-            [[ "$DRY_RUN" == true ]] && info "[DRY-RUN] sudo pacman -S --needed --noconfirm android-tools" \
-                || sudo pacman -S --needed --noconfirm android-tools
+            if [[ "$DRY_RUN" == true ]]; then
+                info "[DRY-RUN] sudo pacman -S --needed --noconfirm android-tools"
+            else
+                sudo pacman -S --needed --noconfirm android-tools
+            fi
             ;;
         debian|ubuntu|linuxmint|pop|zorin|elementary|kali)
             info "Distro: Debian/Ubuntu (o derivado) → apt"
@@ -240,13 +252,19 @@ install_dependencies() {
             ;;
         fedora|rhel|centos|rocky|alma)
             info "Distro: Fedora/RHEL (o derivado) → dnf"
-            [[ "$DRY_RUN" == true ]] && info "[DRY-RUN] sudo dnf install -y android-tools" \
-                || sudo dnf install -y android-tools
+            if [[ "$DRY_RUN" == true ]]; then
+                info "[DRY-RUN] sudo dnf install -y android-tools"
+            else
+                sudo dnf install -y android-tools
+            fi
             ;;
         opensuse*|sles)
             info "Distro: openSUSE → zypper"
-            [[ "$DRY_RUN" == true ]] && info "[DRY-RUN] sudo zypper install -y android-tools" \
-                || sudo zypper install -y android-tools
+            if [[ "$DRY_RUN" == true ]]; then
+                info "[DRY-RUN] sudo zypper install -y android-tools"
+            else
+                sudo zypper install -y android-tools
+            fi
             ;;
         *)
             error "Distribución no reconocida: $distro"
@@ -271,13 +289,13 @@ setup_udev() {
 
     info "Configurando acceso USB para ZTE (vendor ID: ${ZTE_VENDOR_ID})..."
 
-    # Grupo plugdev
     if ! getent group plugdev >/dev/null 2>&1; then
         info "Creando grupo 'plugdev'..."
-        [[ "$DRY_RUN" == false ]] && sudo groupadd plugdev
+        if [[ "$DRY_RUN" == false ]]; then
+            sudo groupadd plugdev
+        fi
     fi
 
-    # Regla udev
     local rule='SUBSYSTEM=="usb", ATTR{idVendor}=="'"${ZTE_VENDOR_ID}"'", MODE="0666", GROUP="plugdev"'
     if [[ -f "$UDEV_RULE_FILE" ]] && grep -q "$ZTE_VENDOR_ID" "$UDEV_RULE_FILE" 2>/dev/null; then
         success "Regla udev ya existe"
@@ -292,7 +310,6 @@ setup_udev() {
         fi
     fi
 
-    # Usuario en plugdev
     if groups "${USER:-root}" 2>/dev/null | grep -qw plugdev; then
         success "Usuario ya pertenece a plugdev"
     else
@@ -334,7 +351,7 @@ wait_for_device() {
         fi
         sleep 2
         (( elapsed += 2 ))
-        printf "${DIM}.${NC}"
+        printf '%s' "${DIM}."
     done
     echo
     die "No se detectó ningún dispositivo en modo fastboot. Revisa el cable USB y el modo del celular."
@@ -395,7 +412,7 @@ confirm() {
     local prompt="${1:-¿Continuar?}"
     local response
     # shellcheck disable=SC2162
-    read -r -p "$(echo -e "${YELLOW}${prompt}${NC} [s/N]: ")" response
+    read -r -p "$(printf '%s' "${YELLOW}${prompt}${NC} [s/N]: ")" response
     case "${response:-}" in
         [sSyY]|[sSyY][iI]|[yY][eE][sS]) return 0 ;;
         *) return 1 ;;
@@ -406,9 +423,9 @@ confirm() {
 # AYUDA Y VERSIÓN
 #===============================================================================
 show_version() {
-    echo "${SCRIPT_NAME} v${VERSION}"
-    echo "Licencia: MIT"
-    echo "Repo:     ${REPO_URL}"
+    printf '%s v%s\n' "${SCRIPT_NAME}" "${VERSION}"
+    printf 'Licencia: MIT\n'
+    printf 'Repo:     %s\n' "${REPO_URL}"
 }
 
 show_help() {
@@ -503,9 +520,15 @@ main() {
     echo
     info "Log:        $LOG_FILE"
     info "Repo:       $REPO_URL"
-    [[ "$DRY_RUN" == true ]]     && warn "DRY-RUN: no se ejecutará nada destructivo"
-    [[ "$ASSUME_YES" == true ]]  && warn "Modo --yes: no pedirá confirmación"
-    [[ "$CHECK_ONLY" == true ]]  && warn "Modo --check: solo verificando entorno"
+    if [[ "$DRY_RUN" == true ]]; then
+        warn "DRY-RUN: no se ejecutará nada destructivo"
+    fi
+    if [[ "$ASSUME_YES" == true ]]; then
+        warn "Modo --yes: no pedirá confirmación"
+    fi
+    if [[ "$CHECK_ONLY" == true ]]; then
+        warn "Modo --check: solo verificando entorno"
+    fi
     echo
 
     if [[ "$CHECK_ONLY" == true ]]; then

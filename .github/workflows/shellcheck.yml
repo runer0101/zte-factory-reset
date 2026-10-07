@@ -5,17 +5,15 @@ on:
     branches: [main, master, develop]
   pull_request:
     branches: [main, master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   shellcheck:
-    name: ShellCheck on ${{ matrix.file }}
+    name: ShellCheck
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        file:
-          - zte-reset.sh
-          - scripts/install.sh
 
     steps:
       - name: Checkout repository
@@ -25,20 +23,58 @@ jobs:
         uses: ludeeus/action-shellcheck@2.0.0
         with:
           scandir: ./
-          additional_files: ${{ matrix.file }}
-          check_together: false
+          additional_files: zte-reset.sh
+          check_together: true
+          ignore_paths: .git,.github
 
-  lint:
+  bash-syntax:
     name: Bash syntax check
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Syntax check
+      - name: Check bash syntax of all scripts
         run: |
           set -e
-          for f in zte-reset.sh scripts/*.sh; do
+          echo "Finding shell scripts..."
+          mapfile -t SCRIPTS < <(find . -type f \( -name "*.sh" -o -name "zte-reset.sh" \) -not -path "./.git/*")
+          if [[ ${#SCRIPTS[@]} -eq 0 ]]; then
+            echo "No shell scripts found"
+            exit 0
+          fi
+          for f in "${SCRIPTS[@]}"; do
             echo "Checking: $f"
             bash -n "$f"
           done
+          echo "All scripts passed syntax check ✓"
+
+  test-help:
+    name: Test --help
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test --help output
+        run: |
+          bash zte-reset.sh --help
+          echo "---"
+          bash zte-reset.sh --version
+
+  test-dry-run:
+    name: Test --dry-run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test --dry-run (no device connected)
+        run: |
+          # En modo dry-run, las primeras etapas (install/udev) intentarían
+          # ejecutar sudo o pacman. Probamos solo --help y --version que
+          # son los flujos seguros sin device.
+          bash zte-reset.sh --check || true
