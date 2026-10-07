@@ -1,0 +1,44 @@
+name: ShellCheck
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  shellcheck:
+    name: ShellCheck on ${{ matrix.file }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        file:
+          - zte-reset.sh
+          - scripts/install.sh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: ./
+          additional_files: ${{ matrix.file }}
+          check_together: false
+
+  lint:
+    name: Bash syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: |
+          set -e
+          for f in zte-reset.sh scripts/*.sh; do
+            echo "Checking: $f"
+            bash -n "$f"
+          done

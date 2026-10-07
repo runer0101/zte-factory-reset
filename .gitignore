@@ -1,0 +1,30 @@
+# Logs
+*.log
+zte-reset-*.log
+
+# Editor / IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.directory
+
+# OS
+.cache/
+*.bak
+*.tmp
+
+# Build artifacts
+*.tar.gz
+*.zip
+dist/
+build/
+release/
+
+# Local configs
+.env
+.env.local

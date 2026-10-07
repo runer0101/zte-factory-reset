@@ -1,0 +1,11 @@
+# Auto-detect text files
+* text=auto eol=lf
+
+# Shell scripts must have LF line endings
+*.sh text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# License
+LICENSE text eol=lf
